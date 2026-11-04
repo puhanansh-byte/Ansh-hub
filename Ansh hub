@@ -1,0 +1,236 @@
+
+-- ANSH HUB | SINGLE LOCAL SCRIPT
+-- Place in StarterPlayer > StarterPlayerScripts
+-- Own-game local prototype
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+
+local player = Players.LocalPlayer
+local gui = Instance.new("ScreenGui")
+gui.Name = "ANSH_HUB"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(245, 310)
+frame.Position = UDim2.new(0, 25, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(15, 20, 38)
+frame.Active = true
+frame.Parent = gui
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(0, 180, 255)
+stroke.Thickness = 2
+
+local title = Instance.new("TextButton")
+title.Size = UDim2.new(1, -75, 0, 42)
+title.Text = "⚡ ANSH HUB"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 19
+title.Parent = frame
+
+local minimize = Instance.new("TextButton")
+minimize.Size = UDim2.fromOffset(30, 30)
+minimize.Position = UDim2.new(1,-68,0,6)
+minimize.Text = "-"
+minimize.Parent = frame
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(30,30)
+close.Position = UDim2.new(1,-34,0,6)
+close.Text = "X"
+close.Parent = frame
+
+local content = Instance.new("Frame")
+content.Position = UDim2.fromOffset(10,48)
+content.Size = UDim2.new(1,-20,1,-58)
+content.BackgroundTransparency = 1
+content.Parent = frame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0,7)
+layout.Parent = content
+
+local enabled = {
+    Steal = false,
+    Treadmill = false,
+    Hit = false,
+    Noclip = false,
+    Fly = false
+}
+
+local function makeButton(name)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,0,0,42)
+    b.BackgroundColor3 = Color3.fromRGB(32,43,65)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.TextSize = 15
+    b.Font = Enum.Font.GothamBold
+    b.Text = name .. " : OFF"
+    b.Parent = content
+    Instance.new("UICorner",b).CornerRadius = UDim.new(0,8)
+
+    b.Activated:Connect(function()
+        enabled[name] = not enabled[name]
+        b.Text = name .. (enabled[name] and " : ON" or " : OFF")
+        b.BackgroundColor3 = enabled[name]
+            and Color3.fromRGB(0,115,155)
+            or Color3.fromRGB(32,43,65)
+    end)
+end
+
+makeButton("Steal")
+makeButton("Treadmill")
+makeButton("Hit")
+makeButton("Noclip")
+makeButton("Fly")
+
+-- Minimize
+local minimized = false
+minimize.Activated:Connect(function()
+    minimized = not minimized
+    content.Visible = not minimized
+    frame.Size = minimized
+        and UDim2.fromOffset(245,45)
+        or UDim2.fromOffset(245,310)
+end)
+
+-- Close
+close.Activated:Connect(function()
+    gui:Destroy()
+end)
+
+-- Dragging (mouse and touchscreen)
+local dragging = false
+local dragStart, startPos
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale,startPos.X.Offset + delta.X,
+            startPos.Y.Scale,startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- Noclip
+local oldCollision = {}
+
+RunService.Stepped:Connect(function()
+    local char = player.Character
+    if not char then return end
+
+    for _,part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if enabled.Noclip then
+                if oldCollision[part] == nil then
+                    oldCollision[part] = part.CanCollide
+                end
+                part.CanCollide = false
+            elseif oldCollision[part] ~= nil then
+                part.CanCollide = oldCollision[part]
+                oldCollision[part] = nil
+            end
+        end
+    end
+end)
+
+-- Fly: basic local movement prototype
+local flyVelocity
+
+local function updateFly()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    if enabled.Fly then
+        if flyVelocity then flyVelocity:Destroy() end
+        flyVelocity = Instance.new("BodyVelocity")
+        flyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
+        flyVelocity.Velocity = Vector3.new(0,12,0)
+        flyVelocity.Parent = root
+    else
+        if flyVelocity then
+            flyVelocity:Destroy()
+            flyVelocity = nil
+        end
+    end
+end
+
+-- Local prototype: only affects locally controlled NPCs/objects.
+local function nearestTagged(tag, range)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local nearest, distance = nil, range
+    for _,obj in ipairs(CollectionService:GetTagged(tag)) do
+        local part = obj:IsA("BasePart") and obj
+            or obj:FindFirstChild("HumanoidRootPart")
+        if part then
+            local d = (part.Position-root.Position).Magnitude
+            if d < distance then
+                nearest, distance = obj, d
+            end
+        end
+    end
+    return nearest
+end
+
+-- Feature loop
+task.spawn(function()
+    while gui.Parent do
+        task.wait(0.6)
+
+        if enabled.Fly then
+            updateFly()
+        elseif flyVelocity then
+            flyVelocity:Destroy()
+            flyVelocity = nil
+        end
+
+        -- These toggles locate your tagged game objects.
+        -- Actual collection, treadmill rewards and damage
+        -- must be implemented by the server in multiplayer.
+        if enabled.Steal then
+            nearestTagged("StealableEgg",12)
+        end
+
+        if enabled.Treadmill then
+            nearestTagged("Treadmill",8)
+        end
+
+        if enabled.Hit then
+            nearestTagged("Enemy",12)
+        end
+    end
+end)
+
+print("ANSH HUB loaded!")
